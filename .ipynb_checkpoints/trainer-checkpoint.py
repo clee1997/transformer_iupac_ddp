@@ -44,13 +44,14 @@ class Trainer:
     def train(self, rank): # this should be passed as the first arg to mp.spawn()
         
         os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12355'
+        os.environ['MASTER_PORT'] = '22111'
 
         torch.cuda.set_device(rank) 
-        print('about to initialize process group')
+        # print('about to initialize process group')
         dist.init_process_group(backend="nccl", world_size=self.n_gpus, rank=rank)
         
-        train_dataloader, valid_dataloader = self.ddp_dataloader() # 아 이게 위에 있으면 아예 print()가 안됨. 
+        
+        train_dataloader, valid_dataloader = self.ddp_dataloader(rank) # 아 이게 위에 있으면 아예 print()가 안됨. 
 
         model_ddp = self.prepare_ddp_model(rank)
         optimizer = torch.optim.Adam(model_ddp.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
@@ -62,15 +63,27 @@ class Trainer:
             end_time = timer()
             epoch_time = end_time - start_time
             val_loss = self.evaluate(rank, model_ddp, valid_dataloader, batch_size=self.batch_size)
-            print((f"Epoch: {epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, "f"Epoch time = {(epoch_time):.3f}s"))
+            print(f"Epoch: {epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, Epoch time = {epoch_time:.3f}s")
+            
+            save_path = os.path.join(saved_path, f'ckpt_epoch{epoch}.pt')
 
             if rank == 0:
-                save_path = os.path.join(saved_path, f'ckpt_epoch{epoch}_loss_{train_loss:.3f}_vloss_{val_loss:.3f}_epoch_time_{epoch_time:.3f}.pt') ## revise this. 
-                torch.save(model.state_dict(), save_path)
+                # print('if rank is 0')
+                # save_path = os.path.join(saved_path, f'ckpt_epoch{epoch}_loss_{train_loss:.3f}_vloss_{val_loss:.3f}_epoch_time_{epoch_time:.3f}.pt') ## revise this. 
+                # torch.save(model.state_dict(), save_path)
+                torch.save(model_ddp.state_dict(), save_path)
+                print(f'########### SAVED, rank = {rank} ###########')
+            
             dist.barrier()
+            # configure map_location properly
+            # map_location = {'cuda:0' : 'cuda:1'}
+            # model_ddp.module.load_state_dict( torch.load(save_path, map_location=map_location) )
+            
+            map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
+            model_ddp.load_state_dict( torch.load(save_path, map_location=map_location) )
 
           
-            print(f'########### SAVED, rank = {rank} ###########')
+            print(f'########### saved state loaded to gpu = {rank} ###########')
           
 
         dist.destroy_process_group()
@@ -89,7 +102,7 @@ class Trainer:
 
         return model
 
-    def ddp_dataloader(self):
+    def ddp_dataloader(self, rank):
 
         dataset = PairDataset(self.csv_path)
 
@@ -126,8 +139,12 @@ class Trainer:
             tgt_input = tgt[:-1, :]
 
             src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, rank)
+            
+            # print('created mask')
 
             logits = model(src, tgt_input, src_mask, tgt_mask,src_padding_mask, tgt_padding_mask, src_padding_mask)
+            
+            # print('got logits')
 
             optimizer.zero_grad()
 
@@ -136,6 +153,9 @@ class Trainer:
             loss.backward()
 
             optimizer.step()
+            # print(f'train loss type = {type(loss)}')
+            # train loss type = <class 'torch.Tensor'>
+            # print(f'train losses type = {type(losses)}') # float 
             losses += loss.item()
 
             train_loss = losses / len(train_dataloader)
@@ -143,15 +163,18 @@ class Trainer:
         return train_loss, model, optimizer
 
 
-    # revise this too it supports DDP. 
+    # revise this too it supports DDP.
+    @torch.no_grad()
     def evaluate(self, rank, model, dataloader, batch_size):
         model.eval()
         losses = 0
+        
+        print('entered eval function')
 
-        # val_iter = Multi30k(split='valid', language_pair=(SRC_LANGUAGE, TGT_LANGUAGE)) ###
         val_dataloader = dataloader
 
         for src, tgt in val_dataloader:
+            # print('entered eval loop')
             src = src.to(rank)
             tgt = tgt.to(rank)
 
@@ -161,8 +184,12 @@ class Trainer:
             
             logits = model(src, tgt_input, src_mask, tgt_mask,src_padding_mask, tgt_padding_mask, src_padding_mask)
             
+            # print('got eval logits')
+            
             tgt_out = tgt[1:, :]
             loss = self.loss_fn(logits.reshape(-1, logits.shape[-1]), tgt_out.reshape(-1))
-            losses += loss.item()
+            losses += loss.item() # this doesn't run. how is this even possible?
+            
+            # print('at the very and of eval func')
 
-        return losses / len(val_dataloader)
+        return (losses / len(val_dataloader))

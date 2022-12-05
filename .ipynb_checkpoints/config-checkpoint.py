@@ -23,7 +23,7 @@ params = {
     'EMB_SIZE' : 512,
     'NHEAD' : 4, # 8이었음. 
     'FFN_HID_DIM' : 512,
-    'BATCH_SIZE' : 128, #128, ## 
+    'BATCH_SIZE' : 64, #128, ## 
     'NUM_EPOCHS' : 100
     # 'SRC_VOCAB_SIZE' : len(vocab['src']),
     # 'TGT_VOCAB_SIZE' : len(vocab['tgt'])

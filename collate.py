@@ -34,4 +34,5 @@ def collate_fn(batch):
     src_batch = pad_sequence(src_batch, padding_value=tok_ids['PAD_IDX'])
     tgt_batch = pad_sequence(tgt_batch, padding_value=tok_ids['PAD_IDX'])
 
-    return src_batch.cuda(), tgt_batch.cuda()
+    # return src_batch.cuda(), tgt_batch.cuda()
+    return src_batch, tgt_batch
