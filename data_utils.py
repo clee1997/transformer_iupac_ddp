@@ -28,9 +28,10 @@ def yield_tokens(dataset, source = 'src'):# -> List[str]:
 
 # device should be specified at another module. 
 def generate_square_subsequent_mask(sz, rank):
-    ## if device=rank doesn't work:
-    # DEVICE = torch.device('cuda:1')
-    device = torch.device(f'cuda:{rank}')
+    
+    # device = torch.device(f'cuda:{rank}')
+
+    device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else 'cpu')
 
     mask = (torch.triu(torch.ones((sz, sz), device=device)) == 1).transpose(0, 1)
     mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
