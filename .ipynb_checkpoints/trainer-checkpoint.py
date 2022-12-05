@@ -65,12 +65,12 @@ class Trainer:
             print((f"Epoch: {epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, "f"Epoch time = {(epoch_time):.3f}s"))
 
             if rank == 0:
-                save_path = os.path.join(saved_path, f'ckpt_epoch{epoch}_loss_{train_loss}_vloss_{val_loss}_epoch_time_{epoch_time}.pt') ## revise this. 
+                save_path = os.path.join(saved_path, f'ckpt_epoch{epoch}_loss_{train_loss:.3f}_vloss_{val_loss:.3f}_epoch_time_{epoch_time:.3f}.pt') ## revise this. 
                 torch.save(model.state_dict(), save_path)
             dist.barrier()
 
           
-            print('########### SAVED ###########')
+            print(f'########### SAVED, rank = {rank} ###########')
           
 
         dist.destroy_process_group()
@@ -116,7 +116,7 @@ class Trainer:
         train_dataloader = dataloader
         
         
-        print('########### Another epoch entered ###########')
+        print(f'########### Another epoch entered, rank = {rank} ###########')
       
 
         for src, tgt in train_dataloader:
