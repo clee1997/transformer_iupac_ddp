@@ -75,12 +75,14 @@ class Trainer:
                 print(f'########### SAVED, rank = {rank} ###########')
             
             dist.barrier()
+            print('barrier overcome')
             # configure map_location properly
             # map_location = {'cuda:0' : 'cuda:1'}
             # model_ddp.module.load_state_dict( torch.load(save_path, map_location=map_location) )
             
             map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
-            model_ddp.load_state_dict( torch.load(save_path, map_location=map_location) )
+            print('map location set')
+            model_ddp.load_state_dict( torch.load(save_path, map_location=map_location) ) # 중간에 module 넣어줘야 함?
 
           
             print(f'########### saved state loaded to gpu = {rank} ###########')

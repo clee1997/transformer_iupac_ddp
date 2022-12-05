@@ -1,3 +1,5 @@
+import os
+
 tok_ids = {
     'UNK_IDX' : 0, 
     'PAD_IDX' : 1, 
@@ -17,11 +19,13 @@ csv_path = '/hdd1/chaeeun/transformer_iupac_dataset/pair_df_merged.csv'
 saved_path = '/hdd1/chaeeun/transformer_iupac_dataset/ckpt_saved/'
 saved_vocab_path = '/hdd1/chaeeun/transformer_iupac_dataset/ckpt_saved/vocab_saved/vocab.pth'
 
+ckpt_path = os.path.join(saved_path, 'ckpt_epoch10.pt')
+
 params = {
-    'NUM_ENCODER_LAYERS' : 3,
-    'NUM_DECODER_LAYERS' : 3,
+    'NUM_ENCODER_LAYERS' : 6,
+    'NUM_DECODER_LAYERS' : 6,
     'EMB_SIZE' : 512,
-    'NHEAD' : 4, # 8이었음. 
+    'NHEAD' : 8, # 8이었음. 
     'FFN_HID_DIM' : 512,
     'BATCH_SIZE' : 64, #128, ## 
     'NUM_EPOCHS' : 100
