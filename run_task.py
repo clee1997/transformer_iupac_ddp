@@ -56,7 +56,7 @@ class ErrorCorrect:
                 break
         return ys
 
-    def run_task(self, rank, src_sentence): # to be used in spawn
+    def run_task(self, rank, src_sentences): # to be used in spawn
         
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '22141'
@@ -66,20 +66,25 @@ class ErrorCorrect:
         
         model = self.prepare_ddp_model(rank)
         model.eval()
+        
+        for src_sentence in src_sentences:
+            # print(f'\nORIGINAL: {src_sentence} \n')
 
-        src_tokens = token_transform(src_sentence)
-        token_ids_src = vocab['src'](src_tokens)
-        src = tensor_transform(token_ids_src).view(-1, 1)
+            src_tokens = token_transform(src_sentence)
+            token_ids_src = vocab['src'](src_tokens)
+            src = tensor_transform(token_ids_src).view(-1, 1)
 
 
-        num_tokens = src.shape[0]
-        src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
-        tgt_tokens = self.greedy_decode(model,  src, src_mask, max_len=num_tokens + 5, start_symbol=tok_ids['BOS_IDX'], rank=rank).flatten()
+            num_tokens = src.shape[0]
+            src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
+            tgt_tokens = self.greedy_decode(model,  src, src_mask, max_len=num_tokens + 5, start_symbol=tok_ids['BOS_IDX'], rank=rank).flatten()
 
-        # return "".join(vocab['tgt'].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
-        res = "".join(vocab['tgt'].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
-        if rank == 0:
-            print(f'CORRECTED: {res}')
+            # return "".join(vocab['tgt'].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
+            res = "".join(vocab['tgt'].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
+            if rank == 0:
+                print(f'\nORIGINAL: {src_sentence} \n')
+                print(f'CORRECTED: {res}')
+                print('####################################################################')
         return
     
     def prepare_ddp_model(self, rank):
@@ -104,10 +109,19 @@ assert (ngpus >= 2), 'Less than 2 gpus available'
 
 # src_sentence = "{(28)-1-[[(4R)-3,4-dihydro-2H-c-hromen-4-ylJamino]-1-oxoprop-an-2-yl]-2-ethoxypyridine-3-carboxylate"
 # src_sentence = 'N-{{(@R)-2,3-dihydro-1,4-benzo-dioxin-3-ylJmethyl]-6-methyl-4-x0-1-[2-(trifluoromethyl)pheny-IJpyridazine-3-carboxamide'
-src_sentence = 'N-{2-(cyclohexen-1  -yl)ethy!]-3-(3,4-dihydro-1H-isoquinolin-2-ylsulfonyl)thiophene-2-carboxa-mide'
+# src_sentence = 'N-{2-(cyclohexen-1  -yl)ethy!]-3-(3,4-dihydro-1H-isoquinolin-2-ylsulfonyl)thiophene-2-carboxa-mide'
 error_correct = ErrorCorrect()
 
+src_sentences = [
+    "N'-{(2S)-2-(1,3-benzodioxol-5-yl)-2-(4-methylpiperazin-1-ylet-hyl]-N-(furan-2-yimethyl)oxami-de",
+    "2-{(6-bromo-2,3-dihydro-1  ,4-b-enzodioxin-7-yl)amino]-N-phen-yFN-propan-2-ylacetamide",
+    "§-(2-chloro-4-fluorophenoxy)-8-nitroisoquinoline",
+    "2-{[(2R)-2-[4-(1,3-benzothiazol-2-ylmethyl)piperazin-1-yllprop-anoyljaminojthiophene-3-carb-oxamide",
+    "1-(S-nitropyridin-2-yl)-4-[3-(trifl-uoromethyl)phenyljsulfonylpip-erazine"
+]
+
 if __name__ == '__main__':
-    print(f'\nORIGINAL: {src_sentence} \n')
-    mp.spawn(error_correct.run_task, args=(src_sentence,), nprocs=ngpus, join=True)
+    # print(f'\nORIGINAL: {src_sentence} \n')
+    mp.spawn(error_correct.run_task, args=(src_sentences,), nprocs=ngpus, join=True)
+    
     

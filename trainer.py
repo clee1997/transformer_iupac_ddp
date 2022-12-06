@@ -44,7 +44,7 @@ class Trainer:
     def train(self, rank): # this should be passed as the first arg to mp.spawn()
         
         os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '22111'
+        os.environ['MASTER_PORT'] = '20111'
 
         torch.cuda.set_device(rank) 
         # print('about to initialize process group')
@@ -57,18 +57,22 @@ class Trainer:
         optimizer = torch.optim.Adam(model_ddp.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
 
         for epoch in range(1, self.num_epochs+1):
+            epoch_time = 0
             start_time = timer()
             train_loss, model, optimizer = self.train_epoch(rank, model_ddp, optimizer, train_dataloader)
 
             end_time = timer()
             epoch_time = end_time - start_time
             val_loss = self.evaluate(rank, model_ddp, valid_dataloader, batch_size=self.batch_size)
-            print(f"Epoch: {epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, Epoch time = {epoch_time:.3f}s")
+            print(f"Epoch: {epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, Epoch time = {epoch_time:.3f}s lolol")
             
             save_path = os.path.join(saved_path, f'ckpt_epoch{epoch}.pt')
+            
+            print('save_path set')
+            print(f'rank = {rank}')
 
             if rank == 0:
-                # print('if rank is 0')
+                print('if rank is 0')
                 # save_path = os.path.join(saved_path, f'ckpt_epoch{epoch}_loss_{train_loss:.3f}_vloss_{val_loss:.3f}_epoch_time_{epoch_time:.3f}.pt') ## revise this. 
                 # torch.save(model.state_dict(), save_path)
                 torch.save(model_ddp.state_dict(), save_path)
