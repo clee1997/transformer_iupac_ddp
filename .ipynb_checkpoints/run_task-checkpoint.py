@@ -1,5 +1,7 @@
 import os
 import torch
+import nltk
+import pandas as pd
 from multiprocessing import Process, Queue
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -8,7 +10,10 @@ import torch.multiprocessing as mp
 from transformer import Seq2SeqTransformer
 from data_utils import generate_square_subsequent_mask, token_transform, tensor_transform
 from get_vocab import vocab
-from config import tok_ids, ckpt_path, params
+from config import tok_ids, ckpt_path, params, dataset_path, csv_path
+
+
+from run_opsin import get_opsin_res
 
 
 
@@ -56,7 +61,37 @@ class ErrorCorrect:
                 break
         return ys
 
-    def run_task(self, rank, src_sentences): # to be used in spawn
+    # def run_task(self, rank, src_sentences): # to be used in spawn
+        
+    #     os.environ['MASTER_ADDR'] = 'localhost'
+    #     os.environ['MASTER_PORT'] = '22141'
+
+    #     torch.cuda.set_device(rank) 
+    #     dist.init_process_group(backend="nccl", world_size=self.n_gpus, rank=rank)
+        
+    #     model = self.prepare_ddp_model(rank)
+    #     model.eval()
+        
+    #     for src_sentence in src_sentences:
+    #         # print(f'\nORIGINAL: {src_sentence} \n')
+
+    #         src_tokens = token_transform(src_sentence)
+    #         token_ids_src = vocab['src'](src_tokens)
+    #         src = tensor_transform(token_ids_src).view(-1, 1)
+
+
+    #         num_tokens = src.shape[0]
+    #         src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
+    #         tgt_tokens = self.greedy_decode(model,  src, src_mask, max_len=num_tokens + 5, start_symbol=tok_ids['BOS_IDX'], rank=rank).flatten()
+
+    #         # return "".join(vocab['tgt'].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
+    #         res = "".join(vocab['tgt'].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
+    #         if rank == 0:
+    #             print(f'\nORIGINAL: {src_sentence} \n')
+    #             print(f'CORRECTED: {res}')
+    #             print('####################################################################')
+    #     return
+    def run_task(self, rank, src_df): # to be used in spawn
         
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '22141'
@@ -66,26 +101,37 @@ class ErrorCorrect:
         
         model = self.prepare_ddp_model(rank)
         model.eval()
-        
-        for src_sentence in src_sentences:
-            # print(f'\nORIGINAL: {src_sentence} \n')
 
-            src_tokens = token_transform(src_sentence)
-            token_ids_src = vocab['src'](src_tokens)
-            src = tensor_transform(token_ids_src).view(-1, 1)
+        if rank == 0:
+            src_df['iupac_corrected'] = ''
+            src_df['opsin_res'] = ''
+            src_df['edit_dist'] = None
+            # pair_df['iupac_noised'] = '' 
 
+            
+            src_df['iupac_corrected'] = src_df['iupac_noised'].map(lambda x: self.spell_correct(x, model=model, rank=rank))
+            src_df['opsin_res'] = src_df['iupac_corrected'].map(get_opsin_res)
+            src_df['edit_dist'] = src_df.apply(lambda x: nltk.edit_distance(x['iupac'], x['iupac_corrected']), axis=1)
 
-            num_tokens = src.shape[0]
-            src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
-            tgt_tokens = self.greedy_decode(model,  src, src_mask, max_len=num_tokens + 5, start_symbol=tok_ids['BOS_IDX'], rank=rank).flatten()
+            csv_save_path = os.path.join(dataset_path, 'corrected_result.csv')
+            src_df.to_csv(csv_save_path)
 
-            # return "".join(vocab['tgt'].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
-            res = "".join(vocab['tgt'].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
-            if rank == 0:
-                print(f'\nORIGINAL: {src_sentence} \n')
-                print(f'CORRECTED: {res}')
-                print('####################################################################')
         return
+
+    def spell_correct(self, src_sentence, model, rank):
+        src_tokens = token_transform(src_sentence)
+        token_ids_src = vocab['src'](src_tokens)
+        src = tensor_transform(token_ids_src).view(-1, 1)
+
+
+        num_tokens = src.shape[0]
+        src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
+        tgt_tokens = self.greedy_decode(model,  src, src_mask, max_len=num_tokens + 5, start_symbol=tok_ids['BOS_IDX'], rank=rank).flatten()
+
+        # return "".join(vocab['tgt'].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
+        res = "".join(vocab['tgt'].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
+
+        return res
     
     def prepare_ddp_model(self, rank):
 
@@ -112,16 +158,31 @@ assert (ngpus >= 2), 'Less than 2 gpus available'
 # src_sentence = 'N-{2-(cyclohexen-1  -yl)ethy!]-3-(3,4-dihydro-1H-isoquinolin-2-ylsulfonyl)thiophene-2-carboxa-mide'
 error_correct = ErrorCorrect()
 
-src_sentences = [
-    "N'-{(2S)-2-(1,3-benzodioxol-5-yl)-2-(4-methylpiperazin-1-ylet-hyl]-N-(furan-2-yimethyl)oxami-de",
-    "2-{(6-bromo-2,3-dihydro-1  ,4-b-enzodioxin-7-yl)amino]-N-phen-yFN-propan-2-ylacetamide",
-    "§-(2-chloro-4-fluorophenoxy)-8-nitroisoquinoline",
-    "2-{[(2R)-2-[4-(1,3-benzothiazol-2-ylmethyl)piperazin-1-yllprop-anoyljaminojthiophene-3-carb-oxamide",
-    "1-(S-nitropyridin-2-yl)-4-[3-(trifl-uoromethyl)phenyljsulfonylpip-erazine"
-]
+# src_sentences = [
+#     "N'-{(2S)-2-(1,3-benzodioxol-5-yl)-2-(4-methylpiperazin-1-ylet-hyl]-N-(furan-2-yimethyl)oxami-de",
+#     "2-{(6-bromo-2,3-dihydro-1  ,4-b-enzodioxin-7-yl)amino]-N-phen-yFN-propan-2-ylacetamide",
+#     "§-(2-chloro-4-fluorophenoxy)-8-nitroisoquinoline",
+#     "2-{[(2R)-2-[4-(1,3-benzothiazol-2-ylmethyl)piperazin-1-yllprop-anoyljaminojthiophene-3-carb-oxamide",
+#     "1-(S-nitropyridin-2-yl)-4-[3-(trifl-uoromethyl)phenyljsulfonylpip-erazine"
+# ]
+df = pd.read_csv(csv_path)
+
+print(f'num of rows in df = {len(df.index)} = {df.shape[0]}')
 
 if __name__ == '__main__':
     # print(f'\nORIGINAL: {src_sentence} \n')
-    mp.spawn(error_correct.run_task, args=(src_sentences,), nprocs=ngpus, join=True)
-    
-    
+    mp.spawn(error_correct.run_task, args=(df,), nprocs=ngpus, join=True)
+
+#########################################################################################################
+#########################################################################################################
+
+# make run_task receive pandas df? yes. 
+# get pandas dataset of iupac and iupac_noised, 
+# print out the number of rows
+# correct the thing, -> calculate edit distance, 
+# save those two columns on the original dataset
+# save csv
+
+
+
+

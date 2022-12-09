@@ -21,13 +21,15 @@ saved_vocab_path = '/hdd1/chaeeun/transformer_iupac_dataset/ckpt_saved/vocab_sav
 
 ckpt_path = os.path.join(saved_path, 'ckpt_epoch90.pt')
 
+opsin_jar_path = '/hdd1/chaeeun/transformer_iupac_dataset/opsin-core-2.7.0-jar-with-dependencies.jar'
+
 params = {
-    'NUM_ENCODER_LAYERS' : 3,
-    'NUM_DECODER_LAYERS' : 3,
-    'EMB_SIZE' : 512,
+    'NUM_ENCODER_LAYERS' : 6,
+    'NUM_DECODER_LAYERS' : 6,
+    'EMB_SIZE' : 256,
     'NHEAD' : 4, # 8이었음. 
-    'FFN_HID_DIM' : 512,
-    'BATCH_SIZE' : 128, #128, ## 
+    'FFN_HID_DIM' : 256,
+    'BATCH_SIZE' : 16, #128, ## 
     'NUM_EPOCHS' : 100
     # 'SRC_VOCAB_SIZE' : len(vocab['src']),
     # 'TGT_VOCAB_SIZE' : len(vocab['tgt'])

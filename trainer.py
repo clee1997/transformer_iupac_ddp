@@ -59,6 +59,7 @@ class Trainer:
         for epoch in range(1, self.num_epochs+1):
             epoch_time = 0
             start_time = timer()
+            dist.barrier()
             train_loss, model, optimizer = self.train_epoch(rank, model_ddp, optimizer, train_dataloader)
 
             end_time = timer()
@@ -70,7 +71,7 @@ class Trainer:
             
             print('save_path set')
             print(f'rank = {rank}')
-
+            
             if rank == 0:
                 print('if rank is 0')
                 # save_path = os.path.join(saved_path, f'ckpt_epoch{epoch}_loss_{train_loss:.3f}_vloss_{val_loss:.3f}_epoch_time_{epoch_time:.3f}.pt') ## revise this. 
@@ -78,18 +79,18 @@ class Trainer:
                 torch.save(model_ddp.state_dict(), save_path)
                 print(f'########### SAVED, rank = {rank} ###########')
             
-            dist.barrier()
-            print('barrier overcome')
+            # dist.barrier()
+            # print('barrier overcome')
             # configure map_location properly
             # map_location = {'cuda:0' : 'cuda:1'}
             # model_ddp.module.load_state_dict( torch.load(save_path, map_location=map_location) )
             
-            map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
-            print('map location set')
-            model_ddp.load_state_dict( torch.load(save_path, map_location=map_location) ) # 중간에 module 넣어줘야 함?
+#             map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
+#             print('map location set')
+#             model_ddp.load_state_dict( torch.load(save_path, map_location=map_location) ) # 중간에 module 넣어줘야 함?
 
           
-            print(f'########### saved state loaded to gpu = {rank} ###########')
+#             print(f'########### saved state loaded to gpu = {rank} ###########')
           
 
         dist.destroy_process_group()
@@ -99,9 +100,9 @@ class Trainer:
 
         model = Seq2SeqTransformer(self.num_encoder_layers, self.num_decoder_layers, self.emb_size, self.nhead, self.src_vocab_size, self.tgt_vocab_size, self.ffn_hid_dim)
 
-        for p in model.parameters():
-            if p.dim() > 1:
-                torch.nn.init.xavier_uniform_(p)
+        # for p in model.parameters():
+        #     if p.dim() > 1:
+        #         torch.nn.init.xavier_uniform_(p)
 
         model = model.to(rank)
         model = DDP(model, device_ids=[rank])
